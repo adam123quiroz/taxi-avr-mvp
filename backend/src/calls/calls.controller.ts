@@ -1,24 +1,22 @@
 import { Controller, Post, Get, Body, Param, Logger } from '@nestjs/common';
 import { CallsService } from './calls.service';
-import { WebhookEventDto } from './dto/webhook-event.dto';
 
-@Controller('api/calls')
+@Controller('calls')
 export class CallsController {
 	private readonly logger = new Logger(CallsController.name);
 
 	constructor(private readonly callsService: CallsService) {}
 
-	// ==========================================
-	// WEBHOOK - Recibe eventos de AVR Core
-	// ==========================================
 	@Post('webhook')
-	async handleWebhook(@Body() eventDto: WebhookEventDto) {
-		return await this.callsService.handleWebhookEvent(eventDto);
+	async handleWebhook(@Body() eventDto: any) {  // ← Cambiar a 'any' temporalmente
+		this.logger.log(`📥 Webhook recibido: ${JSON.stringify(eventDto)}`);
+		try {
+			return await this.callsService.handleWebhookEvent(eventDto);
+		} catch (error) {
+			this.logger.error(`❌ Error procesando webhook: ${error.message}`);
+			return { success: false, error: error.message };
+		}
 	}
-
-	// ==========================================
-	// API REST - Endpoints de consulta
-	// ==========================================
 
 	@Get()
 	async getAllCalls() {

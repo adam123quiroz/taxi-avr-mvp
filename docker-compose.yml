@@ -91,28 +91,20 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3000
-
-      # Database
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USER=avruser
       - DATABASE_PASSWORD=${DB_PASSWORD}
       - DATABASE_NAME=avrdb
-
-      # Webhook Secret
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
-
     depends_on:
       - postgres
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
+    # QUITAR los volúmenes para evitar conflictos
     restart: unless-stopped
     networks:
       - avr-network
-
   # ==========================================
   # POSTGRESQL
   # ==========================================

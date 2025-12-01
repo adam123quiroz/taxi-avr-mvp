@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Call } from './entities/call.entity';
 import { Transcript } from './entities/transcript.entity';
-import { WebhookEventDto } from './dto/webhook-event.dto';
 
 @Injectable()
 export class CallsService {
@@ -17,10 +16,13 @@ export class CallsService {
 		private transcriptsRepository: Repository<Transcript>,
 	) {}
 
-	async handleWebhookEvent(eventDto: WebhookEventDto) {
-		this.logger.log(`📥 Evento recibido: ${eventDto.event} - UUID: ${eventDto.uuid}`);
+	async handleWebhookEvent(eventDto: any) {
+		// AVR envía "type" no "event"
+		const eventType = eventDto.type || eventDto.event;
 
-		switch (eventDto.event) {
+		this.logger.log(`📥 Evento recibido: ${eventType} - UUID: ${eventDto.uuid}`);
+
+		switch (eventType) {
 			case 'call_started':
 				return await this.handleCallStarted(eventDto);
 
@@ -34,18 +36,18 @@ export class CallsService {
 				return await this.handleError(eventDto);
 
 			default:
-				this.logger.warn(`⚠️ Evento desconocido: ${eventDto.event}`);
-				return { success: false, message: 'Evento desconocido' };
+				this.logger.warn(`⚠️ Evento desconocido: ${eventType}`);
+				return { success: true, message: 'Evento ignorado' };
 		}
 	}
 
-	private async handleCallStarted(eventDto: WebhookEventDto) {
+	private async handleCallStarted(eventDto: any) {
 		const call = this.callsRepository.create({
 			uuid: eventDto.uuid,
-			callerNumber: eventDto.data?.caller_number,
-			startTime: new Date(),
+			callerNumber: eventDto.payload?.caller_number || 'unknown',
+			startTime: new Date(eventDto.timestamp),
 			status: 'active',
-			metadata: eventDto.data,
+			metadata: eventDto.payload || {},
 		});
 
 		await this.callsRepository.save(call);
@@ -54,12 +56,12 @@ export class CallsService {
 		return { success: true, message: 'Call started' };
 	}
 
-	private async handleTranscription(eventDto: WebhookEventDto) {
+	private async handleTranscription(eventDto: any) {
 		const transcript = this.transcriptsRepository.create({
 			callUuid: eventDto.uuid,
-			text: eventDto.data?.text,
-			speaker: eventDto.data?.is_user ? 'user' : 'agent',
-			timestamp: new Date(eventDto.data?.timestamp || Date.now()),
+			text: eventDto.payload?.text || '',
+			speaker: eventDto.payload?.is_user ? 'user' : 'agent',
+			timestamp: new Date(eventDto.timestamp),
 		});
 
 		await this.transcriptsRepository.save(transcript);
@@ -68,26 +70,29 @@ export class CallsService {
 		return { success: true, message: 'Transcription saved' };
 	}
 
-	private async handleCallEnded(eventDto: WebhookEventDto) {
+	private async handleCallEnded(eventDto: any) {
 		const call = await this.callsRepository.findOne({
 			where: { uuid: eventDto.uuid },
 		});
 
 		if (call) {
-			call.endTime = new Date();
-			call.duration = eventDto.data?.duration;
+			const endTime = new Date(eventDto.timestamp);
+			const duration = Math.floor((endTime.getTime() - call.startTime.getTime()) / 1000);
+
+			call.endTime = endTime;
+			call.duration = duration;
 			call.status = 'completed';
 
 			await this.callsRepository.save(call);
 
-			this.logger.log(`✅ Llamada finalizada: ${eventDto.uuid} - Duración: ${call.duration}s`);
+			this.logger.log(`✅ Llamada finalizada: ${eventDto.uuid} - Duración: ${duration}s`);
 		}
 
 		return { success: true, message: 'Call ended' };
 	}
 
-	private async handleError(eventDto: WebhookEventDto) {
-		this.logger.error(`❌ Error en llamada ${eventDto.uuid}: ${JSON.stringify(eventDto.data)}`);
+	private async handleError(eventDto: any) {
+		this.logger.error(`❌ Error en llamada ${eventDto.uuid}: ${JSON.stringify(eventDto.payload)}`);
 
 		const call = await this.callsRepository.findOne({
 			where: { uuid: eventDto.uuid },
@@ -95,16 +100,12 @@ export class CallsService {
 
 		if (call) {
 			call.status = 'error';
-			call.metadata = { ...call.metadata, error: eventDto.data };
+			call.metadata = { ...call.metadata, error: eventDto.payload };
 			await this.callsRepository.save(call);
 		}
 
 		return { success: true, message: 'Error logged' };
 	}
-
-	// ==========================================
-	// API REST - Consultas
-	// ==========================================
 
 	async getAllCalls() {
 		return await this.callsRepository.find({

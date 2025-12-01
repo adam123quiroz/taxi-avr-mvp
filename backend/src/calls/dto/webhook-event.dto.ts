@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsObject, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsObject } from 'class-validator';
 
 export class WebhookEventDto {
 	@IsString()
@@ -9,11 +9,11 @@ export class WebhookEventDto {
 	@IsNotEmpty()
 	uuid: string;
 
+	@IsOptional()  // ← Hacer todo opcional
 	@IsObject()
-	@IsOptional()
 	data?: any;
 
-	@IsString()
 	@IsOptional()
+	@IsString()
 	timestamp?: string;
 }
