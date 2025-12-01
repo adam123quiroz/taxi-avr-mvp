@@ -2,17 +2,27 @@ version: '3.8'
 
 services:
   # ==========================================
-  # ASTERISK - Motor Telefónico
+  # ASTERISK - Configuración PJSIP
   # ==========================================
   asterisk:
     image: agentvoiceresponse/avr-asterisk:latest
     container_name: mvp-asterisk
-    network_mode: host
+    ports:
+      - "5060:5060/udp"           # SIP
+      - "5061:5061/tcp"           # SIP TLS
+      - "10000-10099:10000-10099/udp"  # RTP
     volumes:
       - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
+      - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf
+      - ./asterisk/my_pjsip.conf:/etc/asterisk/my_pjsip.conf
+      - ./asterisk/my_manager.conf:/etc/asterisk/my_manager.conf
+      - ./asterisk/my_ari.conf:/etc/asterisk/my_ari.conf
+      - ./asterisk/my_queues.conf:/etc/asterisk/my_queues.conf
     environment:
       - TZ=America/Santiago
     restart: unless-stopped
+    networks:
+      - avr-network
 
   # ==========================================
   # AVR CORE - Orquestador
