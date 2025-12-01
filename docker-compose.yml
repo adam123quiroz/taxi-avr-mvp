@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # ASTERISK - Motor Telefónico
+  # ==========================================
+  asterisk:
+    image: agentvoiceresponse/avr-asterisk:latest
+    container_name: mvp-asterisk
+    network_mode: host
+    volumes:
+      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
+    environment:
+      - TZ=America/Santiago
+    restart: unless-stopped
+
+  # ==========================================
+  # AVR CORE - Orquestador
+  # ==========================================
+  avr-core:
+    image: agentvoiceresponse/avr-core:latest
+    container_name: mvp-avr-core
+    ports:
+      - "5001:5001"
+    environment:
+      # Speech-to-Speech URL (OpenAI Realtime)
+      - STS_URL=http://avr-sts-openai:6030/audio-stream
+
+      # Voice Activity Detection
+      - VAD_ENABLED=true
+      - VAD_THRESHOLD=0.5
+
+      # Webhooks hacia NestJS
+      - WEBHOOK_URL=http://backend:3000/api/calls/webhook
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+
+      # Audio Config
+      - AUDIO_SAMPLE_RATE=8000
+      - AUDIO_CODEC=slin16
+
+    depends_on:
+      - avr-sts-openai
+      - backend
+    restart: unless-stopped
+    networks:
+      - avr-network
+
+  # ==========================================
+  # OPENAI REALTIME - Speech-to-Speech
+  # ==========================================
+  avr-sts-openai:
+    image: agentvoiceresponse/avr-sts-openai:latest
+    container_name: mvp-sts-openai
+    ports:
+      - "6030:6030"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=gpt-4o-realtime-preview-2024-12-17
+      - OPENAI_VOICE=alloy
+      - PORT=6030
+
+      # System Prompt básico
+      - SYSTEM_PROMPT=|
+        Eres un asistente virtual inteligente y amigable.
+        Responde de manera conversacional y natural.
+        Puedes ayudar con cualquier pregunta que te hagan,
+        similar a como lo harías en un chat.
+        Mantén tus respuestas concisas pero informativas.
+        Si no sabes algo, admítelo honestamente.
+
+    restart: unless-stopped
+    networks:
+      - avr-network
+
+  # ==========================================
+  # NESTJS BACKEND
+  # ==========================================
+  backend:
+    build: ./backend
+    container_name: mvp-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+
+      # Database
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=avruser
+      - DATABASE_PASSWORD=${DB_PASSWORD}
+      - DATABASE_NAME=avrdb
+
+      # Webhook Secret
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+
+    depends_on:
+      - postgres
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - avr-network
+
+  # ==========================================
+  # POSTGRESQL
+  # ==========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: mvp-postgres
+    environment:
+      - POSTGRES_USER=avruser
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=avrdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - avr-network
+
+networks:
+  avr-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
