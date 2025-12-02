@@ -34,22 +34,10 @@ services:
     ports:
       - "5001:5001"
     environment:
-      # Speech-to-Speech URL (OpenAI Realtime)
-      - STS_URL=ws://avr-sts-openai:6030/audio-stream
-
-      # Voice Activity Detection
-      - VAD_ENABLED=true
-      - VAD_THRESHOLD=0.5
-
-      # Webhooks hacia NestJS
+      - PORT=5001
+      - STS_URL=ws://avr-sts-openai:6030
       - WEBHOOK_URL=http://backend:3000/api/calls/webhook
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
-
-      # Audio Config
-      - AUDIO_SAMPLE_RATE=8000
-      - AUDIO_CODEC=slin
-
-      - LOG_LEVEL=debug  # ← Agregar debug
     depends_on:
       - avr-sts-openai
       - backend
@@ -66,12 +54,11 @@ services:
     ports:
       - "6030:6030"
     environment:
+      - PORT=6030
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=gpt-4o-realtime-preview-2024-12-17
       - OPENAI_VOICE=alloy
-      - PORT=6030
-      - SYSTEM_PROMPT=Eres un asistente virtual inteligente y amigable. Responde de manera conversacional y natural en español.
-      - LOG_LEVEL=debug  # ← Agregar debug
+      - OPENAI_INSTRUCTIONS=Eres un asistente virtual inteligente y amigable. Responde de manera conversacional y natural en español.
     restart: unless-stopped
     networks:
       - avr-network
