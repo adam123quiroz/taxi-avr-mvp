@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script de despliegue para servidor Linux
-# Uso: ./deploy.sh [usuario@servidor]
+# Uso: ./deploy.sh [usuario@servidor] [puerto_ssh] [ruta_clave_privada]
 
 set -e
 
@@ -16,12 +16,20 @@ echo -e "${GREEN}=== Despliegue AVR MVP ===${NC}"
 # Verificar que se pasó el argumento del servidor
 if [ -z "$1" ]; then
     echo -e "${RED}Error: Debes especificar el servidor${NC}"
-    echo "Uso: ./deploy.sh usuario@ip_servidor"
-    echo "Ejemplo: ./deploy.sh ubuntu@192.168.1.100"
+    echo "Uso: ./deploy.sh usuario@ip_servidor [puerto_ssh] [ruta_clave_privada]"
+    echo "Ejemplo: ./deploy.sh ubuntu@192.168.1.100 1022 ~/keys/private.pem"
     exit 1
 fi
 
 SERVER=$1
+SSH_PORT=${2:-22}
+SSH_KEY=${3:-""}
+
+# Construir opciones SSH
+SSH_OPTS="-p $SSH_PORT -o StrictHostKeyChecking=no"
+if [ -n "$SSH_KEY" ]; then
+    SSH_OPTS="$SSH_OPTS -i $SSH_KEY"
+fi
 
 # Verificar que existe .env
 if [ ! -f .env ]; then
@@ -31,16 +39,17 @@ if [ ! -f .env ]; then
 fi
 
 echo -e "${YELLOW}Verificando conexión SSH...${NC}"
-ssh -o ConnectTimeout=5 $SERVER "echo 'Conexión exitosa'" || {
+ssh $SSH_OPTS -o ConnectTimeout=5 $SERVER "echo 'Conexión exitosa'" || {
     echo -e "${RED}Error: No se pudo conectar al servidor${NC}"
     exit 1
 }
 
 echo -e "${YELLOW}Creando directorio en servidor...${NC}"
-ssh $SERVER "mkdir -p ~/avr-mvp"
+ssh $SSH_OPTS $SERVER "mkdir -p ~/avr-mvp"
 
 echo -e "${YELLOW}Copiando archivos al servidor...${NC}"
 rsync -avz --progress \
+    -e "ssh $SSH_OPTS" \
     --exclude 'node_modules' \
     --exclude '.git' \
     --exclude 'backend/dist' \
@@ -49,7 +58,7 @@ rsync -avz --progress \
     ./ $SERVER:~/avr-mvp/
 
 echo -e "${YELLOW}Instalando Docker en servidor (si no está instalado)...${NC}"
-ssh $SERVER << 'ENDSSH'
+ssh $SSH_OPTS $SERVER << 'ENDSSH'
 # Verificar si Docker está instalado
 if ! command -v docker &> /dev/null; then
     echo "Instalando Docker..."
@@ -68,9 +77,9 @@ fi
 ENDSSH
 
 echo -e "${YELLOW}Configurando firewall...${NC}"
-ssh $SERVER << 'ENDSSH'
+ssh $SSH_OPTS $SERVER << 'ENDSSH'
 # Permitir puertos necesarios
-sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 1022/tcp  # SSH (puerto personalizado)
 sudo ufw allow 5060/udp  # SIP
 sudo ufw allow 5060/tcp  # SIP
 sudo ufw allow 10000:10020/udp  # RTP
@@ -79,7 +88,7 @@ echo "Firewall configurado"
 ENDSSH
 
 echo -e "${YELLOW}Iniciando contenedores en servidor...${NC}"
-ssh $SERVER << 'ENDSSH'
+ssh $SSH_OPTS $SERVER << 'ENDSSH'
 cd ~/avr-mvp
 docker-compose down
 docker-compose pull

@@ -1,11 +1,9 @@
-version: '3.8'
-
 services:
   # ==========================================
   # ASTERISK - Configuración PJSIP
   # ==========================================
   asterisk:
-    image: andrius/asterisk:latest
+    image: agentvoiceresponse/avr-asterisk:latest
     container_name: mvp-asterisk
     ports:
       - "5060:5060/udp"
