@@ -47,7 +47,7 @@ services:
 
       # Audio Config
       - AUDIO_SAMPLE_RATE=8000
-      - AUDIO_CODEC=slin16
+      - AUDIO_CODEC=slin
 
       - LOG_LEVEL=debug  # ← Agregar debug
     depends_on:
