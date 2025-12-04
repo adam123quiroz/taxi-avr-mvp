@@ -60,8 +60,8 @@ services:
       - OPENAI_VOICE=alloy
       - OPENAI_INSTRUCTIONS=Eres un asistente virtual inteligente y amigable. Responde de manera conversacional y natural en español.
       # Parámetros VAD para mejorar detección de voz
-      - OPENAI_VAD_THRESHOLD=0.6
-      - OPENAI_VAD_SILENCE_DURATION_MS=500
+      - OPENAI_VAD_THRESHOLD=0.95
+      - OPENAI_VAD_SILENCE_DURATION_MS=1000
       - OPENAI_VAD_PREFIX_PADDING_MS=300
     restart: unless-stopped
     networks:
