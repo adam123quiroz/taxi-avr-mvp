@@ -29,6 +29,9 @@ export class CallsService {
 			case 'transcription':
 				return await this.handleTranscription(eventDto);
 
+			case 'interruption':
+				return await this.handleInterruption(eventDto);
+
 			case 'call_ended':
 				return await this.handleCallEnded(eventDto);
 
@@ -68,6 +71,24 @@ export class CallsService {
 
 		this.logger.log(`💬 Transcripción guardada para: ${eventDto.uuid}`);
 		return { success: true, message: 'Transcription saved' };
+	}
+
+	private async handleInterruption(eventDto: any) {
+		this.logger.log(`🔇 Usuario interrumpió la IA - UUID: ${eventDto.uuid}`);
+		
+		// Opcional: Registrar métrica de interrupciones en la base de datos
+		const call = await this.callsRepository.findOne({
+			where: { uuid: eventDto.uuid },
+		});
+
+		if (call) {
+			// Incrementar contador de interrupciones en metadata
+			const interruptions = (call.metadata?.interruptions || 0) + 1;
+			call.metadata = { ...call.metadata, interruptions };
+			await this.callsRepository.save(call);
+		}
+
+		return { success: true, message: 'Interruption logged' };
 	}
 
 	private async handleCallEnded(eventDto: any) {
