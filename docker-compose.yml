@@ -1,117 +1,73 @@
 services:
-  # ==========================================
-  # ASTERISK - Configuración PJSIP
-  # ==========================================
-  asterisk:
-    image: agentvoiceresponse/avr-asterisk:latest
-    container_name: mvp-asterisk
-    ports:
-      - "5060:5060/udp"
-      - "5060:5060/tcp"
-      - "10000-10020:10000-10020/udp"
-    volumes:
-      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
-      - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf
-      - ./asterisk/rtp.conf:/etc/asterisk/rtp.conf
-      - ./asterisk/my_pjsip.conf:/etc/asterisk/my_pjsip.conf
-      - ./asterisk/my_manager.conf:/etc/asterisk/my_manager.conf
-      - ./asterisk/my_ari.conf:/etc/asterisk/my_ari.conf
-      - ./asterisk/my_queues.conf:/etc/asterisk/my_queues.conf
-    environment:
-      - TZ=America/Santiago
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-    networks:
-      - avr-network
-
-  # ==========================================
-  # AVR CORE - Orquestador
-  # ==========================================
   avr-core:
-    image: agentvoiceresponse/avr-core:latest
-    container_name: mvp-avr-core
-    ports:
-      - "5001:5001"
+    image: agentvoiceresponse/avr-core
+    platform: linux/x86_64
+    container_name: avr-core
+    restart: always
     environment:
-      - PORT=5001
+      - PORT=5001 
       - STS_URL=ws://avr-sts-openai:6030
-      - WEBHOOK_URL=http://backend:3000/api/calls/webhook
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
-    depends_on:
-      - avr-sts-openai
-      - backend
-    restart: unless-stopped
-    networks:
-      - avr-network
-
-  # ==========================================
-  # OPENAI REALTIME - Speech-to-Speech
-  # ==========================================
-  avr-sts-openai:
-    image: agentvoiceresponse/avr-sts-openai:latest
-    container_name: mvp-sts-openai
     ports:
-      - "6030:6030"
+      - 5001:5001
+    networks:
+      - avr
+
+  avr-sts-openai:
+    image: agentvoiceresponse/avr-sts-openai
+    platform: linux/x86_64
+    container_name: avr-sts-openai
+    restart: always
     environment:
       - PORT=6030
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=gpt-4o-realtime-preview-2024-12-17
-      - OPENAI_VOICE=alloy
-      - OPENAI_INSTRUCTIONS=Eres un asistente virtual inteligente y amigable. Responde de manera conversacional y natural en español.
-      # Parámetros VAD para mejorar detección de voz
-      - OPENAI_VAD_THRESHOLD=0.8
-      - OPENAI_VAD_SILENCE_DURATION_MS=800
-      - OPENAI_VAD_PREFIX_PADDING_MS=300
-    restart: unless-stopped
+      - OPENAI_API_KEY=$OPENAI_API_KEY
+      - OPENAI_MODEL=gpt-4o-realtime-preview
+      - OPENAI_INSTRUCTIONS="You are a helpful assistant."
+      - AMI_URL=${AMI_URL:-http://avr-ami:6006}
+    # volumes: # uncomment if you want to use the custom tools
+    #   - ./tools:/usr/src/app/tools
     networks:
-      - avr-network
+      - avr
 
-  # ==========================================
-  # NESTJS BACKEND
-  # ==========================================
-  backend:
-    build: ./backend
-    container_name: mvp-backend
+  avr-asterisk:
+    image: agentvoiceresponse/avr-asterisk
+    platform: linux/x86_64
+    container_name: avr-asterisk
+    restart: always
     ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - DATABASE_USER=avruser
-      - DATABASE_PASSWORD=${DB_PASSWORD}
-      - DATABASE_NAME=avrdb
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
-    depends_on:
-      - postgres
-    # QUITAR los volúmenes para evitar conflictos
-    restart: unless-stopped
-    networks:
-      - avr-network
-  # ==========================================
-  # POSTGRESQL
-  # ==========================================
-  postgres:
-    image: postgres:15-alpine
-    container_name: mvp-postgres
-    environment:
-      - POSTGRES_USER=avruser
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=avrdb
-    ports:
-      - "5432:5432"
+      - 5038:5038
+      - 5060:5060
+      - 8088:8088
+      - 10000-10050:10000-10050/udp
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    restart: unless-stopped
+      - ./asterisk/conf/manager.conf:/etc/asterisk/my_manager.conf
+      - ./asterisk/conf/pjsip.conf:/etc/asterisk/my_pjsip.conf
+      - ./asterisk/conf/extensions.conf:/etc/asterisk/my_extensions.conf
+      - ./asterisk/conf/queues.conf:/etc/asterisk/my_queues.conf
+      - ./asterisk/conf/ari.conf:/etc/asterisk/my_ari.conf
     networks:
-      - avr-network
+      - avr
+
+  avr-ami:
+    image: agentvoiceresponse/avr-ami
+    platform: linux/x86_64
+    container_name: avr-ami
+    restart: always
+    environment:
+      - PORT=6006
+      - AMI_HOST=${AMI_HOST:-avr-asterisk}
+      - AMI_PORT=${AMI_PORT:-5038}
+      - AMI_USERNAME=${AMI_USERNAME:-avr}
+      - AMI_PASSWORD=${AMI_PASSWORD:-avr}
+    ports:
+      - 6006:6006
+    networks:
+      - avr
 
 networks:
-  avr-network:
+  avr:
+    name: avr
     driver: bridge
-
-volumes:
-  postgres_data:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          
